@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+:root { --ink: #15202b; --muted: #607080; --line: #dbe4ec; --paper: #f7f9fb; --accent: #0b7285; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
+a { color: inherit; text-decoration: none; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #f4a261; outline-offset: 3px; }
+.container { width: min(1120px, calc(100% - 2rem)); margin-inline: auto; }
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 1rem; top: 1rem; z-index: 10; background: white; padding: .75rem 1rem; }
+.card { border: 1px solid var(--line); border-radius: 14px; background: white; }
+@media (prefers-reduced-motion: no-preference) { a, button { transition: color .15s ease, background-color .15s ease, border-color .15s ease; } }

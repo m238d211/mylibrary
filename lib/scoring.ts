@@ -1,0 +1,7 @@
+import type { ToolStatus } from "./types";
+export type ScoreInput = { npmDownloads: number | null; githubStars: number | null; daysSinceUpdate: number | null; daysSinceRelease: number | null; archived: boolean; hasRepository: boolean; };
+export type ScoreBreakdown = { downloads: number; stars: number; activity: number; release: number; penalties: number; total: number };
+const cappedLog = (value: number | null, cap: number) => value === null || value <= 0 ? 0 : Math.min(1, Math.log10(value + 1) / Math.log10(cap + 1));
+const recency = (days: number | null, window: number) => days === null ? 0 : Math.max(0, Math.min(1, 1 - days / window));
+export function calculateScore(input: ScoreInput): ScoreBreakdown { const downloads = Math.round(cappedLog(input.npmDownloads, 10_000_000) * 30); const stars = Math.round(cappedLog(input.githubStars, 100_000) * 25); const activity = Math.round(recency(input.daysSinceUpdate, 365) * 20); const release = Math.round(recency(input.daysSinceRelease, 730) * 15); const penalties = (input.archived ? -25 : 0) + (!input.hasRepository ? -8 : 0); const total = Math.max(0, Math.min(100, downloads + stars + activity + release + 10 + penalties)); return { downloads, stars, activity, release, penalties, total }; }
+export function statusForScore(score: number): ToolStatus { if (score >= 70) return "Established"; if (score >= 50) return "Growing"; if (score >= 30) return "New and Promising"; return "Needs Review"; }

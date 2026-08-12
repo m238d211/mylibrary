@@ -1,0 +1,3 @@
+import { describe, expect, it } from "vitest";
+import { calculateScore, statusForScore } from "./scoring";
+describe("scoring", () => { it("caps popularity signals and penalizes archived projects", () => { const score = calculateScore({ npmDownloads: 10_000_000, githubStars: 100_000, daysSinceUpdate: 0, daysSinceRelease: 0, archived: false, hasRepository: true }); const archived = calculateScore({ npmDownloads: 10_000_000, githubStars: 100_000, daysSinceUpdate: 0, daysSinceRelease: 0, archived: true, hasRepository: true }); expect(score.total).toBeLessThanOrEqual(100); expect(archived.total).toBeLessThan(score.total); }); it("assigns an explicit status", () => { expect(statusForScore(80)).toBe("Established"); expect(statusForScore(20)).toBe("Needs Review"); }); });
