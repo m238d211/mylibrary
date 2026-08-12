@@ -40,6 +40,14 @@ export function ToolCard({ tool }: { tool: Tool }) {
               : tool.githubStars.toLocaleString()}
           </strong>
         </div>
+        <div>
+          <span className="block text-xs text-[var(--muted)]">npm weekly downloads</span>
+          <strong>{tool.npmDownloads === null ? "Unavailable" : tool.npmDownloads.toLocaleString()}</strong>
+        </div>
+        <div>
+          <span className="block text-xs text-[var(--muted)]">Latest version</span>
+          <strong>{tool.latestVersion ?? "Unavailable"}</strong>
+        </div>
       </div>
     </article>
   );

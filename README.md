@@ -40,7 +40,7 @@ For the MVP, review and publish records directly in Supabase. A full owner authe
 
 ## Scoring and classification
 
-Scores are capped and normalized: downloads (30), GitHub stars (25), repository activity (20), release recency (15), plus a small baseline, with penalties for archived repositories and missing repositories. Status labels are derived only from the resulting score. Category classification uses documented keyword mappings in `lib/classification.ts`; it is deterministic and does not claim that any tool is objectively best.
+Scores are capped and normalized: downloads (30), GitHub stars (25), repository activity (20), release recency (15), plus a small baseline, with penalties for archived repositories and missing repositories. The weekly collector searches multiple npm queries including React, Tailwind CSS, Axios, TanStack, TypeScript, testing, forms, authentication, animation, accessibility, databases, and build tools, then enriches candidates with GitHub metadata and npm weekly downloads. Status labels are derived only from the resulting score. Category classification uses documented keyword mappings in `lib/classification.ts`; it is deterministic and does not claim that any tool is objectively best.
 
 ## Verification
 
