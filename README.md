@@ -7,7 +7,7 @@ MyLibrary is a public, login-free directory of useful and recently active web-de
 - Next.js App Router and Server Components for public pages.
 - Supabase PostgreSQL for tools, metrics, collection runs, and private report idempotency.
 - Server-only Route Handler for the Vercel Cron entrypoint.
-- GitHub REST and npm APIs are called from the server only. Resend sends the weekly report only to `OWNER_EMAIL` and the optional `SECONDARY_OWNER_EMAIL`.
+- GitHub REST and npm APIs are called from the server only. Nodemailer sends the weekly report through private SMTP credentials to `OWNER_EMAIL` and the optional `SECONDARY_OWNER_EMAIL`.
 - No visitor accounts, subscriptions, Firebase, or client-side API secrets.
 
 ## Local setup
@@ -24,9 +24,9 @@ The public UI intentionally renders an empty state until Supabase is configured 
 
 Required for the public database-backed app: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Supabase calls this the low-privilege publishable key; it is safe to expose in the browser because RLS still protects the database.
 
-Required for collection and email: `SUPABASE_SECRET_KEY`, `GITHUB_TOKEN` (optional for low-volume public requests), `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `OWNER_EMAIL`, and `CRON_SECRET`. Set `SECONDARY_OWNER_EMAIL` when a second private recipient should receive the same weekly report. The Supabase secret key is server-only and must never begin with `NEXT_PUBLIC_`.
+Required for collection and email: `SUPABASE_SECRET_KEY`, `GITHUB_TOKEN` (optional for low-volume public requests), `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `OWNER_EMAIL`, and `CRON_SECRET`. Set `EMAIL_FROM` and `SECONDARY_OWNER_EMAIL` when needed. The Supabase secret key and SMTP password are server-only and must never begin with `NEXT_PUBLIC_`.
 
-Never expose the Supabase secret/service-role key, Resend, GitHub, or Cron secrets to client code. Keep values in Vercel Environment Variables or local `.env.local`; `.env*` files are ignored except `.env.example`.
+Never expose the Supabase secret/service-role key, SMTP password, GitHub, or Cron secrets to client code. Keep values in Vercel Environment Variables or local `.env.local`; `.env*` files are ignored except `.env.example`.
 
 ## Supabase
 
@@ -55,7 +55,7 @@ npm run build
 
 1. Create a Supabase project and run the migration.
 2. Create a GitHub token with the least access required for public repository reads.
-3. Verify a Resend sender domain and set `RESEND_FROM_EMAIL`.
+3. Create an SMTP app password or SMTP credential with your email provider and set the SMTP variables.
 4. Add environment variables to Vercel for Preview and Production.
 5. Deploy and confirm the Cron request returns `401` without the secret and proceeds with it.
 

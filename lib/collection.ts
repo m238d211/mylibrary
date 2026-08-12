@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { z } from "zod";
 import { classifyTool } from "./classification";
 import {
@@ -172,8 +172,11 @@ export async function sendWeeklyReport(summary: {
 }) {
   const primaryRecipient = process.env.OWNER_EMAIL;
   const secondaryRecipient = process.env.SECONDARY_OWNER_EMAIL;
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT ?? 587);
+  const user = process.env.SMTP_USER;
+  const password = process.env.SMTP_PASSWORD;
+  const from = process.env.EMAIL_FROM ?? user;
   const recipients = [
     ...new Set(
       [primaryRecipient, secondaryRecipient].filter((value): value is string =>
@@ -181,7 +184,7 @@ export async function sendWeeklyReport(summary: {
       ),
     ),
   ];
-  if (!primaryRecipient || !apiKey || !from)
+  if (!primaryRecipient || !host || !user || !password || !from)
     throw new Error("Email configuration is missing");
   const service = createServiceClient();
   const week = new Date();
@@ -192,6 +195,6 @@ export async function sendWeeklyReport(summary: {
   if (existing.data?.delivery_status === "sent") return { skipped: true };
   const report = existing.data ?? (await service.from("weekly_reports").insert({ reporting_week: reportingWeek, recipient: recipients.join(","), summary, delivery_status: "pending" }).select("id").single()).data;
   if (!report) throw new Error("Unable to create weekly report record");
-  const resend = new Resend(apiKey);
-  try { const result = await resend.emails.send({ from, to: recipients, subject: "MyLibrary weekly collection report", text: `New or updated tools: ${summary.newTools}. Failed sources: ${summary.failures.join(", ") || "None"}.`, html: `<p>New or updated tools: <strong>${summary.newTools}</strong></p><p>Failed sources: ${summary.failures.join(", ") || "None"}</p>` }); await service.from("weekly_reports").update({ delivery_status: "sent", sent_at: new Date().toISOString(), resend_id: result.data?.id ?? null }).eq("id", report.id); return { skipped: false, sent: true }; } catch (error) { await service.from("weekly_reports").update({ delivery_status: "failed" }).eq("id", report.id); throw error; }
+  const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass: password } });
+  try { const result = await transporter.sendMail({ from, to: recipients.join(","), subject: "MyLibrary weekly collection report", text: `New or updated tools: ${summary.newTools}. Failed sources: ${summary.failures.join(", ") || "None"}.`, html: `<p>New or updated tools: <strong>${summary.newTools}</strong></p><p>Failed sources: ${summary.failures.join(", ") || "None"}</p>` }); await service.from("weekly_reports").update({ delivery_status: "sent", sent_at: new Date().toISOString(), resend_id: result.messageId }).eq("id", report.id); return { skipped: false, sent: true }; } catch (error) { await service.from("weekly_reports").update({ delivery_status: "failed" }).eq("id", report.id); throw error; }
 }
