@@ -38,7 +38,7 @@ const npmSearchSchema = z.object({
     }),
   ),
 });
-const npmPackageSchema = z.object({ name: z.string(), description: z.string().nullable(), keywords: z.array(z.string()).optional(), "dist-tags": z.object({ latest: z.string().optional() }).optional(), links: z.object({ npm: z.string().url().optional(), homepage: z.string().url().optional(), repository: z.string().url().optional() }).optional() });
+const npmPackageSchema = z.object({ name: z.string(), description: z.string().nullable(), keywords: z.array(z.string()).optional(), "dist-tags": z.object({ latest: z.string().optional() }).optional(), homepage: z.string().url().optional(), repository: z.union([z.string().url(), z.object({ url: z.string().url() })]).optional(), links: z.object({ npm: z.string().url().optional(), homepage: z.string().url().optional(), repository: z.string().url().optional() }).optional() });
 const npmDownloadsSchema = z.object({ downloads: z.number().int().nonnegative() });
 const timeout = (ms: number) => AbortSignal.timeout(ms);
 async function fetchJson(url: string, init?: RequestInit) {
@@ -58,6 +58,7 @@ async function fetchJson(url: string, init?: RequestInit) {
 async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>) { const results: R[] = []; for (let index = 0; index < items.length; index += limit) { results.push(...(await Promise.all(items.slice(index, index + limit).map(mapper)))); } return results; }
 async function fetchGithubRepository(repositoryUrl: string | null | undefined) { const canonical = canonicalRepositoryUrl(repositoryUrl); if (!canonical) return null; const path = new URL(canonical).pathname.split("/").filter(Boolean); if (path.length !== 2) return null; try { const repo = githubRepoSchema.parse(await fetchJson(`https://api.github.com/repos/${path[0]}/${path[1]}`, { headers: process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : undefined })); return { stars: repo.stargazers_count, updatedAt: repo.updated_at, archived: repo.archived, repositoryUrl: repo.html_url }; } catch { return null; } }
 async function fetchNpmDownloads(packageName: string) { try { const data = npmDownloadsSchema.parse(await fetchJson(`https://api.npmjs.org/downloads/point/last-week/${encodeURIComponent(packageName)}`)); return data.downloads; } catch { return null; } }
+async function fetchNpmPackage(packageName: string) { try { const item = npmPackageSchema.parse(await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`)); const repositoryUrl = typeof item.repository === "string" ? item.repository : item.repository?.url ?? item.links?.repository; return { name: item.name, npmName: item.name, repositoryUrl, homepageUrl: item.homepage ?? item.links?.homepage, latestVersion: item["dist-tags"]?.latest ?? null, description: item.description ?? "No description provided.", keywords: item.keywords ?? [] }; } catch { return null; } }
 async function enrichCandidate(candidate: Candidate): Promise<Candidate> { const repo = await fetchGithubRepository(candidate.repositoryUrl); const downloads = candidate.npmName ? await fetchNpmDownloads(candidate.npmName) : null; return { ...candidate, repositoryUrl: repo?.repositoryUrl ?? candidate.repositoryUrl, githubStars: repo?.stars ?? null, npmDownloads: downloads, repositoryUpdatedAt: repo?.updatedAt ?? null, archived: repo?.archived ?? false }; }
 export function assertCronSecret(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -76,7 +77,10 @@ export async function collectTools() {
     throw new Error("Unable to create collection run");
   const failures: string[] = [];
   let candidates: Candidate[] = [];
-  try { const github = githubSearchSchema.parse(await fetchJson("https://api.github.com/search/repositories?q=topic:web-development+topic:typescript&sort=updated&order=desc&per_page=20", { headers: process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : undefined })); candidates = github.items.map((repo) => ({ name: repo.full_name.split("/")[1], repositoryUrl: repo.html_url, description: repo.description ?? "No description provided.", keywords: repo.topics ?? [], githubStars: repo.stargazers_count, repositoryUpdatedAt: repo.updated_at, archived: repo.archived })); } catch { failures.push("GitHub"); }
+  const featuredPackages = ["react", "react-dom", "axios", "@tanstack/react-query", "@tanstack/react-table", "tailwindcss", "typescript", "next", "vite", "vitest", "jest", "zustand", "redux", "react-redux", "react-hook-form", "zod", "prisma", "drizzle-orm", "framer-motion", "@playwright/test"];
+  const featured = await mapWithConcurrency(featuredPackages, 5, fetchNpmPackage);
+  candidates = candidates.concat(featured.filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null));
+  try { const github = githubSearchSchema.parse(await fetchJson("https://api.github.com/search/repositories?q=topic:web-development+topic:typescript&sort=updated&order=desc&per_page=20", { headers: process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : undefined })); candidates = candidates.concat(github.items.map((repo) => ({ name: repo.full_name.split("/")[1], repositoryUrl: repo.html_url, description: repo.description ?? "No description provided.", keywords: repo.topics ?? [], githubStars: repo.stargazers_count, repositoryUpdatedAt: repo.updated_at, archived: repo.archived }))); } catch { failures.push("GitHub"); }
   try {
     const npmQueries = ["react", "tailwindcss", "axios", "tanstack", "typescript", "testing", "forms validation", "authentication", "animation", "accessibility", "database orm", "build tool"];
     const npmResults = await Promise.all(npmQueries.map(async (query) => { try { return npmSearchSchema.parse(await fetchJson(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(query)}&size=10`)).objects; } catch { return []; } }));
@@ -85,7 +89,7 @@ export async function collectTools() {
   } catch {
     failures.push("npm");
   }
-  const unique = deduplicateCandidates(candidates).slice(0, 50);
+  const unique = deduplicateCandidates(candidates).slice(0, 80);
   const enriched = await mapWithConcurrency(unique, 5, enrichCandidate);
   let processed = 0;
   for (const candidate of enriched.slice(0, 30)) {
