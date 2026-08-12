@@ -187,23 +187,11 @@ export async function sendWeeklyReport(summary: {
   const week = new Date();
   week.setUTCDate(week.getUTCDate() - ((week.getUTCDay() + 6) % 7));
   const reportingWeek = week.toISOString().slice(0, 10);
-  const claim = await service
-    .from("weekly_reports")
-    .insert({
-      reporting_week: reportingWeek,
-      recipient: recipients.join(","),
-      summary,
-    })
-    .select("id")
-    .single();
-  if (claim.error || !claim.data) return { skipped: true };
+  const existing = await service.from("weekly_reports").select("id,delivery_status").eq("reporting_week", reportingWeek).maybeSingle();
+  if (existing.error) throw new Error("Unable to inspect weekly report status");
+  if (existing.data?.delivery_status === "sent") return { skipped: true };
+  const report = existing.data ?? (await service.from("weekly_reports").insert({ reporting_week: reportingWeek, recipient: recipients.join(","), summary, delivery_status: "pending" }).select("id").single()).data;
+  if (!report) throw new Error("Unable to create weekly report record");
   const resend = new Resend(apiKey);
-  const result = await resend.emails.send({
-    from,
-    to: recipients,
-    subject: "MyLibrary weekly collection report",
-    text: `New or updated tools: ${summary.newTools}. Failed sources: ${summary.failures.join(", ") || "None"}.`,
-    html: `<p>New or updated tools: <strong>${summary.newTools}</strong></p><p>Failed sources: ${summary.failures.join(", ") || "None"}</p>`,
-  });
-  return { skipped: false, result };
+  try { const result = await resend.emails.send({ from, to: recipients, subject: "MyLibrary weekly collection report", text: `New or updated tools: ${summary.newTools}. Failed sources: ${summary.failures.join(", ") || "None"}.`, html: `<p>New or updated tools: <strong>${summary.newTools}</strong></p><p>Failed sources: ${summary.failures.join(", ") || "None"}</p>` }); await service.from("weekly_reports").update({ delivery_status: "sent", sent_at: new Date().toISOString(), resend_id: result.data?.id ?? null }).eq("id", report.id); return { skipped: false, sent: true }; } catch (error) { await service.from("weekly_reports").update({ delivery_status: "failed" }).eq("id", report.id); throw error; }
 }
