@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ScoreInfo } from "@/components/score-info";
+import { ScoreRing } from "@/components/score-ring";
+import { StatusBadge } from "@/components/status-badge";
+import { ToolLinks, ToolMonogram } from "@/components/tool-bits";
+import { formatDate, formatNumber } from "@/lib/format";
+import type { ScoreBreakdown } from "@/lib/scoring";
 import { getPublishedToolBySlug } from "@/lib/tools";
 
 export const revalidate = 3600;
-
-// Older rows were stored before URLs were sanitized, so only render http(s) links.
-const safeLink = (value: string | null) =>
-  value && /^https?:\/\//i.test(value) ? value : null;
-const formatNumber = (value: number | null) =>
-  value === null ? "Unavailable" : value.toLocaleString();
-const formatDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString("en", { dateStyle: "medium" }) : "Unavailable";
 
 export async function generateMetadata({
   params,
@@ -25,6 +23,41 @@ export async function generateMetadata({
     : { title: "Tool not found" };
 }
 
+// Maximums mirror the weights in lib/scoring.ts calculateScore.
+const breakdownParts: Array<[keyof ScoreBreakdown, string, number]> = [
+  ["downloads", "npm weekly downloads", 30],
+  ["stars", "GitHub stars", 25],
+  ["activity", "Repository activity", 20],
+  ["release", "Release recency", 15],
+];
+
+function Breakdown({ breakdown }: { breakdown: ScoreBreakdown }) {
+  return (
+    <ul className="space-y-4">
+      {breakdownParts.map(([key, label, max]) => {
+        const value = breakdown[key];
+        return (
+          <li key={key}>
+            <div className="flex items-baseline justify-between gap-4 text-sm">
+              <span className="text-ink-soft">{label}</span>
+              <span className="font-mono tabular-nums text-muted">
+                <span className="font-semibold text-ink">{value}</span>/{max}
+              </span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface" aria-hidden="true">
+              <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(0, Math.min(100, (value / max) * 100))}%` }} />
+            </div>
+          </li>
+        );
+      })}
+      <li className="flex items-baseline justify-between gap-4 border-t border-line pt-4 text-sm">
+        <span className="text-ink-soft">Baseline{breakdown.penalties ? " and penalties" : ""}</span>
+        <span className="font-mono tabular-nums font-semibold">{10 + breakdown.penalties}</span>
+      </li>
+    </ul>
+  );
+}
+
 export default async function ToolPage({
   params,
 }: {
@@ -33,13 +66,7 @@ export default async function ToolPage({
   const { slug } = await params;
   const tool = await getPublishedToolBySlug(slug);
   if (!tool) notFound();
-  const links = [
-    ["GitHub", safeLink(tool.githubUrl)],
-    ["npm", safeLink(tool.npmUrl)],
-    ["Website", safeLink(tool.homepageUrl)],
-  ].filter((link): link is [string, string] => Boolean(link[1]));
   const stats: Array<[string, string]> = [
-    ["Score", `${tool.score}/100`],
     ["GitHub stars", formatNumber(tool.githubStars)],
     ["npm weekly downloads", formatNumber(tool.npmDownloads)],
     ["Latest version", tool.latestVersion ?? "Unavailable"],
@@ -47,62 +74,64 @@ export default async function ToolPage({
     ["Discovered", formatDate(tool.discoveredAt)],
   ];
   return (
-    <>
-      <header className="border-b border-[var(--line)] bg-white">
-        <div className="container flex items-center justify-between py-5">
-          <Link href="/" className="text-xl font-bold">
-            My<span className="text-[var(--accent)]">Library</span>
-          </Link>
-          <Link href="/tools" className="text-sm text-[var(--muted)]">
-            Browse tools
-          </Link>
+    <main id="main" className="container py-10">
+      <nav aria-label="Breadcrumb" className="text-sm text-muted">
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li><Link href="/tools" className="hover:text-ink">Tools</Link></li>
+          <li aria-hidden="true">/</li>
+          <li>
+            <Link href={`/tools?category=${encodeURIComponent(tool.category)}`} className="hover:text-ink">{tool.category}</Link>
+          </li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" className="truncate font-medium text-ink">{tool.name}</li>
+        </ol>
+      </nav>
+
+      <header className="reveal mt-8 flex flex-wrap items-start gap-5">
+        <ToolMonogram tool={tool} size="lg" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="wrap-break-word text-3xl font-semibold tracking-tight md:text-4xl">{tool.name}</h1>
+            <StatusBadge status={tool.status} />
+          </div>
+          <p className="mt-3 max-w-3xl text-lg leading-8 text-muted">{tool.description}</p>
+          <ToolLinks tool={tool} className="mt-6" />
         </div>
       </header>
-      <main id="main" className="container py-12">
-        <Link
-          href="/tools"
-          className="text-sm font-semibold text-[var(--accent)]"
-        >
-          ← All tools
-        </Link>
-        <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-              {tool.category}
-            </p>
-            <h1 className="mt-2 break-words text-4xl font-bold">{tool.name}</h1>
-          </div>
-          <span className="rounded-full bg-[#e6f4f1] px-3 py-1 text-sm font-semibold text-[#176b5d]">
-            {tool.status}
-          </span>
-        </div>
-        <p className="mt-4 max-w-3xl text-lg leading-8 text-[var(--muted)]">
-          {tool.description}
-        </p>
-        {links.length > 0 && (
-          <div className="mt-6 flex flex-wrap gap-3">
-            {links.map(([label, href]) => (
-              <a
-                key={label}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg border border-[var(--line)] bg-white px-4 py-2 text-sm font-semibold"
-              >
-                {label} ↗
-              </a>
+
+      <div className="mt-12 grid gap-6 lg:grid-cols-[1fr_380px]">
+        <section aria-labelledby="signals-heading" className="card reveal p-6" style={{ ["--delay" as string]: "80ms" }}>
+          <h2 id="signals-heading" className="font-semibold tracking-tight">Signals</h2>
+          <dl className="mt-5 grid gap-x-6 gap-y-5 sm:grid-cols-2">
+            {stats.map(([label, value]) => (
+              <div key={label} className="border-l-2 border-line pl-4">
+                <dt className="text-xs text-muted">{label}</dt>
+                <dd className="mt-1 font-mono text-lg font-semibold tabular-nums">{value}</dd>
+              </div>
             ))}
-          </div>
-        )}
-        <dl className="card mt-8 grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
-          {stats.map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-xs text-[var(--muted)]">{label}</dt>
-              <dd className="mt-1 font-bold">{value}</dd>
+          </dl>
+        </section>
+
+        <section aria-labelledby="score-heading" className="card reveal p-6" style={{ ["--delay" as string]: "140ms" }}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 id="score-heading" className="font-semibold tracking-tight">Score</h2>
+              <p className="mt-1 text-sm text-muted">Out of 100, recalculated weekly.</p>
             </div>
-          ))}
-        </dl>
-      </main>
-    </>
+            <ScoreRing score={tool.score} size={64} />
+          </div>
+          <div className="mt-6">
+            {tool.scoreBreakdown ? (
+              <Breakdown breakdown={tool.scoreBreakdown} />
+            ) : (
+              <p className="rounded-xl bg-surface p-4 text-sm text-muted">A detailed breakdown is not available for this tool yet.</p>
+            )}
+          </div>
+          <div className="mt-5 border-t border-line pt-4">
+            <ScoreInfo className="btn btn-ghost -ml-2.5 px-2.5 py-1.5 text-sm" />
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }

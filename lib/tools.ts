@@ -1,4 +1,5 @@
-import type { Tool, ToolSort } from "./types";
+import type { ScoreBreakdown } from "./scoring";
+import type { Tool, ToolDetail, ToolSort } from "./types";
 import { createPublicClient } from "./supabase";
 
 const toolColumns = "id,slug,name,description,category,github_url,npm_url,homepage_url,github_stars,npm_downloads,latest_version,score,status,discovered_at,updated_at";
@@ -16,11 +17,26 @@ export async function getPublishedTools(options: { limit?: number; query?: strin
   return ((data ?? []) as ToolRow[]).map(toTool);
 }
 
-export async function getPublishedToolBySlug(slug: string): Promise<Tool | null> {
+const breakdownKeys = ["downloads", "stars", "activity", "release", "penalties", "total"] as const;
+// score_breakdown is jsonb defaulting to {}, so only a complete numeric breakdown is shown.
+const toBreakdown = (value: unknown): ScoreBreakdown | null => value && typeof value === "object" && breakdownKeys.every((key) => typeof (value as Record<string, unknown>)[key] === "number") ? (value as ScoreBreakdown) : null;
+
+export async function getCategoryCounts(): Promise<Record<string, number>> {
+  const client = createPublicClient();
+  if (!client) return {};
+  const { data } = await client.from("tools").select("category").eq("is_published", true).limit(1000);
+  const counts: Record<string, number> = {};
+  for (const row of (data ?? []) as Array<{ category: string }>) counts[row.category] = (counts[row.category] ?? 0) + 1;
+  return counts;
+}
+
+export async function getPublishedToolBySlug(slug: string): Promise<ToolDetail | null> {
   // Slugs are generated as lowercase a-z, 0-9 and dashes; anything else cannot match a row.
   if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
   const client = createPublicClient();
   if (!client) return null;
-  const { data } = await client.from("tools").select(toolColumns).eq("is_published", true).eq("slug", slug).maybeSingle();
-  return data ? toTool(data as ToolRow) : null;
+  const { data } = await client.from("tools").select(`${toolColumns},score_breakdown`).eq("is_published", true).eq("slug", slug).maybeSingle();
+  if (!data) return null;
+  const row = data as ToolRow & { score_breakdown: unknown };
+  return { ...toTool(row), scoreBreakdown: toBreakdown(row.score_breakdown) };
 }

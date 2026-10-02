@@ -1,92 +1,111 @@
 import Link from "next/link";
+import { ScoreInfo } from "@/components/score-info";
 import { ToolCard } from "@/components/tool-card";
-import { getPublishedTools } from "@/lib/tools";
+import { CATEGORIES } from "@/lib/categories";
+import { getCategoryCounts, getPublishedTools } from "@/lib/tools";
 
-// Refresh hourly; the weekly collection also revalidates this page immediately.
+// Rebuilt at most hourly; the weekly cron also revalidates "/" right after collecting.
 export const revalidate = 3600;
 
-export default async function HomePage() {
-  const tools = await getPublishedTools({ limit: 12, sort: "score" });
+function SectionHeading({ eyebrow, title, href, id }: { eyebrow: string; title: string; href: string; id: string }) {
   return (
-    <>
-      <header className="border-b border-[var(--line)] bg-white">
-        <div className="container flex items-center justify-between py-5">
-          <Link href="/" className="text-xl font-bold tracking-tight">
-            My<span className="text-[var(--accent)]">Library</span>
-          </Link>
-          <nav
-            aria-label="Primary navigation"
-            className="flex gap-5 text-sm text-[var(--muted)]"
-          >
-            <Link href="/tools">Browse tools</Link>
-            <Link href="/categories">Categories</Link>
-          </nav>
-        </div>
-      </header>
-      <main id="main">
-        <section className="container py-20">
-          <p className="mb-4 text-sm font-semibold uppercase tracking-[.2em] text-[var(--accent)]">
-            A calmer tool directory
-          </p>
-          <h1 className="max-w-3xl text-4xl font-bold leading-tight md:text-6xl">
-            Find web-development tools with signals you can actually understand.
+    <div className="mb-6 flex items-end justify-between gap-4">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h2 id={id} className="mt-1.5 text-2xl font-semibold tracking-tight md:text-3xl">
+          {title}
+        </h2>
+      </div>
+      <Link href={href} className="shrink-0 text-sm font-semibold text-ink hover:text-accent">
+        View all →
+      </Link>
+    </div>
+  );
+}
+
+export default async function HomePage() {
+  const [topTools, frameworks, counts] = await Promise.all([
+    getPublishedTools({ limit: 9, sort: "score" }),
+    getPublishedTools({ limit: 6, sort: "score", category: "Frameworks" }),
+    getCategoryCounts(),
+  ]);
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  const activeCategories = CATEGORIES.filter((category) => counts[category.name]);
+  return (
+    <main id="main">
+      <section className="border-b border-line">
+        <div className="container py-16 md:py-24">
+          <p className="eyebrow reveal">Updated every week</p>
+          <h1 className="reveal mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight md:text-6xl" style={{ ["--delay" as string]: "60ms" }}>
+            The web-development tools worth knowing, <span className="text-accent">ranked by real signals.</span>
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-[var(--muted)]">
-            MyLibrary tracks useful, active libraries across the modern web
-            stack. Browse without an account, compare transparent scores, and
-            see the data behind each recommendation.
+          <p className="reveal mt-6 max-w-2xl text-lg leading-8 text-muted" style={{ ["--delay" as string]: "120ms" }}>
+            MyLibrary tracks downloads, stars and activity across npm and GitHub, then keeps only the tools developers actually rely on.
           </p>
-          <div className="mt-8 flex gap-3">
-            <Link
-              className="rounded-lg bg-[var(--accent)] px-5 py-3 font-semibold text-white"
-              href="/tools"
-            >
-              Explore the library
-            </Link>
-            <Link
-              className="rounded-lg border border-[var(--line)] bg-white px-5 py-3 font-semibold"
-              href="/categories"
-            >
-              Browse categories
-            </Link>
-          </div>
-        </section>
-        <section className="container pb-20" aria-labelledby="latest-heading">
-          <div className="mb-6 flex items-end justify-between">
+          <form action="/tools" role="search" className="reveal mt-8 flex max-w-xl gap-2" style={{ ["--delay" as string]: "180ms" }}>
+            <label htmlFor="home-search" className="sr-only">Search tools</label>
+            <input id="home-search" name="q" className="field h-12" placeholder="Search React, testing, ORM…" autoComplete="off" />
+            <button type="submit" className="btn btn-primary h-12 px-5">Search</button>
+          </form>
+          <dl className="reveal mt-10 flex flex-wrap gap-x-10 gap-y-4" style={{ ["--delay" as string]: "240ms" }}>
             <div>
-              <p className="text-sm font-semibold text-[var(--accent)]">
-                Latest signals
-              </p>
-              <h2 id="latest-heading" className="mt-1 text-3xl font-bold">
-                Tools worth a closer look
-              </h2>
+              <dt className="text-sm text-muted">Tools listed</dt>
+              <dd className="font-mono text-2xl font-semibold tabular-nums">{total}</dd>
             </div>
-            <Link
-              href="/tools"
-              className="text-sm font-semibold text-[var(--accent)]"
-            >
-              View all →
-            </Link>
-          </div>
-          {tools.length ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {tools.map((tool) => (
-                <ToolCard key={tool.id} tool={tool} />
-              ))}
+            <div>
+              <dt className="text-sm text-muted">Categories</dt>
+              <dd className="font-mono text-2xl font-semibold tabular-nums">{activeCategories.length}</dd>
             </div>
-          ) : (
-            <div className="card p-8 text-[var(--muted)]">
-              The first collection is not available yet. Check back after the
-              weekly collection runs.
+            <div className="flex items-end">
+              <ScoreInfo className="btn btn-secondary px-3.5 py-2 text-sm" />
             </div>
-          )}
-        </section>
-      </main>
-      <footer className="border-t border-[var(--line)] bg-white py-8 text-sm text-[var(--muted)]">
-        <div className="container">
-          Open directory. No accounts. No visitor email collection.
+          </dl>
         </div>
-      </footer>
-    </>
+      </section>
+
+      {activeCategories.length > 0 && (
+        <nav aria-label="Popular categories" className="container mt-10">
+          <ul className="flex flex-wrap gap-2">
+            {activeCategories.map((category) => (
+              <li key={category.slug}>
+                <Link
+                  href={`/tools?category=${encodeURIComponent(category.name)}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-line px-3.5 py-1.5 text-sm font-medium hover:border-ink"
+                >
+                  {category.name}
+                  <span className="font-mono text-xs text-faint">{counts[category.name]}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      <section className="container mt-14" aria-labelledby="top-heading">
+        <SectionHeading eyebrow="Highest scores" title="Top tools right now" href="/tools" id="top-heading" />
+        {topTools.length ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {topTools.map((tool, index) => (
+              <ToolCard key={tool.id} tool={tool} index={index} />
+            ))}
+          </div>
+        ) : (
+          <div className="card p-10 text-center text-muted">
+            The first collection is not available yet. Check back after the weekly collection runs.
+          </div>
+        )}
+      </section>
+
+      {frameworks.length > 0 && (
+        <section className="container mt-20" aria-labelledby="frameworks-heading">
+          <SectionHeading eyebrow="Frameworks" title="Foundations to build on" href={`/tools?category=${encodeURIComponent("Frameworks")}`} id="frameworks-heading" />
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {frameworks.map((tool, index) => (
+              <ToolCard key={tool.id} tool={tool} index={index} />
+            ))}
+          </div>
+        </section>
+      )}
+    </main>
   );
 }
