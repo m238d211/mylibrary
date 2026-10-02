@@ -11,6 +11,7 @@ const sorts: Array<[ToolSort, string]> = [
   ["activity", "Recent activity"],
 ];
 const categories = [
+  "Frameworks",
   "State Management",
   "Testing",
   "Styling and UI",
