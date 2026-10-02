@@ -1,3 +1,4 @@
+import { NO_DESCRIPTION } from "./normalization";
 import type { ToolStatus } from "./types";
 export type ScoreInput = { npmDownloads: number | null; githubStars: number | null; daysSinceUpdate: number | null; daysSinceRelease: number | null; archived: boolean; hasRepository: boolean; };
 export type ScoreBreakdown = { downloads: number; stars: number; activity: number; release: number; penalties: number; total: number };
@@ -5,3 +6,10 @@ const cappedLog = (value: number | null, cap: number) => value === null || value
 const recency = (days: number | null, window: number) => days === null ? 0 : Math.max(0, Math.min(1, 1 - days / window));
 export function calculateScore(input: ScoreInput): ScoreBreakdown { const downloads = Math.round(cappedLog(input.npmDownloads, 10_000_000) * 30); const stars = Math.round(cappedLog(input.githubStars, 100_000) * 25); const activity = Math.round(recency(input.daysSinceUpdate, 365) * 20); const release = Math.round(recency(input.daysSinceRelease, 730) * 15); const penalties = (input.archived ? -25 : 0) + (!input.hasRepository ? -8 : 0); const total = Math.max(0, Math.min(100, downloads + stars + activity + release + 10 + penalties)); return { downloads, stars, activity, release, penalties, total }; }
 export function statusForScore(score: number): ToolStatus { if (score >= 70) return "Established"; if (score >= 50) return "Growing"; if (score >= 30) return "New and Promising"; return "Needs Review"; }
+export const QUALITY = { maxDaysSinceUpdate: 365, minWeeklyDownloads: 20_000, minGithubStars: 2_000, minStarsWithDownloads: 500, minScore: 40, minDescriptionLength: 10 } as const;
+// Transitive dependencies and type stubs rank high on raw downloads but are not tools developers choose directly.
+const deniedPackages = new Set(["react-is", "scheduler", "loose-envify", "tslib", "@babel/runtime", "regenerator-runtime", "core-js", "csstype", "js-tokens", "object-assign"]);
+export function isDeniedPackage(npmName: string | null | undefined) { const name = npmName?.trim().toLowerCase(); return Boolean(name && (name.startsWith("@types/") || name.startsWith("@babel/helper-") || deniedPackages.has(name))); }
+export type QualityInput = { npmName: string | null; description: string; archived: boolean; daysSinceUpdate: number | null; npmDownloads: number | null; githubStars: number | null; score: number };
+// High downloads alone are not enough: transitive dependencies are downloaded heavily but rarely starred, so they also need some stars.
+export function passesQualityThresholds(input: QualityInput): boolean { const description = input.description.trim(); if (input.archived || isDeniedPackage(input.npmName)) return false; if (description.length < QUALITY.minDescriptionLength || description === NO_DESCRIPTION) return false; if (input.daysSinceUpdate !== null && input.daysSinceUpdate > QUALITY.maxDaysSinceUpdate) return false; const stars = input.githubStars ?? 0; const downloads = input.npmDownloads ?? 0; if (!(stars >= QUALITY.minGithubStars || (downloads >= QUALITY.minWeeklyDownloads && stars >= QUALITY.minStarsWithDownloads))) return false; return input.score >= QUALITY.minScore; }

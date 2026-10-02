@@ -2,6 +2,9 @@ import Link from "next/link";
 import { ToolCard } from "@/components/tool-card";
 import { getPublishedTools } from "@/lib/tools";
 
+// Refresh hourly; the weekly collection also revalidates this page immediately.
+export const revalidate = 3600;
+
 export default async function HomePage() {
   const tools = await getPublishedTools({ limit: 12, sort: "score" });
   return (
